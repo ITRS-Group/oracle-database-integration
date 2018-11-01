@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!--Edited using Gateway Setup Editor version GA3.0.17-140205 at 2014-03-24 11:38:36 by slapp on TPAD21-->
+<!-- Gateway-created setup include file for user LDN\slapp at 192.168.2.156 -->
+<gateway compatibility="1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://schema.itrsgroup.com/GA3.0.17-140102/gateway.xsd">
+	<types>
+		<type name="oracledbmonitoring">
+			<sampler ref="Oracle_SQL"/>
+		</type>
+	</types>
+	<samplers>
+		<samplerGroup name="database">
+			<samplerGroup name="oracle">
+				<sampler name="Oracle_SQL">
+					<var-group>
+						<data>Oracle</data>
+					</var-group>
+					<plugin>
+						<sql-toolkit>
+							<queries>
+								<query>
+									<name>
+										<data>ServerStatus</data>
+									</name>
+									<sql>
+										<data>SELECT 
+instance_name, 
+host_name, 
+startup_time, 
+status, 
+parallel, 
+archiver, 
+logins, 
+shutdown_pending, 
+database_status, 
+instance_role, 
+active_state 
+FROM v$instance
+</data>
+									</sql>
+								</query>
+								<query>
+									<name>
+										<data>TableSpace</data>
+									</name>
+									<sql>
+										<data>SELECT 
+	(a.tablespace_name) tableName, 
+	round(a.bytes_alloc / 1024 / 1024, 2) mbAllocated, 
+	round(nvl(b.bytes_free, 0) / 1024 / 1024, 2) mb_Free, 
+	round((a.bytes_alloc - nvl(b.bytes_free, 0)) / 1024 / 1024, 2) mb_Used, 
+	round((nvl(b.bytes_free, 0) / a.bytes_alloc) * 100,2) percentFree, 
+	100 - round((nvl(b.bytes_free, 0) / a.bytes_alloc) * 100,2) percentUsed, 
+	(a.autoext) autoExtend
+FROM 
+	( 
+	select  f.tablespace_name, 
+	sum(f.bytes) bytes_alloc, 
+	max(f.autoextensible) autoext 
+	from dba_data_files f 
+	group by tablespace_name 
+	) a, 
+	( 
+	select  f.tablespace_name, 
+	sum(f.bytes)  bytes_free 
+	from dba_free_space f 
+	group by tablespace_name 
+	) b 
+WHERE a.tablespace_name = b.tablespace_name (+) 
+UNION ALL 
+SELECT 
+	(h.tablespace_name) tableName, 
+	round(sum(h.bytes_free + h.bytes_used) / 1048576, 2) mbAllocated, 
+	round(sum((h.bytes_free + h.bytes_used) - nvl(p.bytes_used, 0)) / 1048576, 2) mbFree, 
+	round(sum(nvl(p.bytes_used, 0))/ 1048576, 2) mbUsed, 
+	round((sum((h.bytes_free + h.bytes_used) - nvl(p.bytes_used, 0)) / sum(h.bytes_used + h.bytes_free)) * 100,2) percentFree, 
+	100 - round((sum((h.bytes_free + h.bytes_used) - nvl(p.bytes_used, 0)) / sum(h.bytes_used + h.bytes_free)) * 100,2) percentUsed, 
+	max(f.autoextensible) autoExtend 
+FROM 
+	sys.v_$TEMP_SPACE_HEADER h, sys.v_$Temp_extent_pool p, dba_temp_files f 
+WHERE 
+	p.file_id(+) = h.file_id 
+AND 
+	p.tablespace_name(+) = h.tablespace_name 
+AND 
+	f.file_id = h.file_id 
+AND 
+	f.tablespace_name = h.tablespace_name 
+GROUP BY 
+	h.tablespace_name, f.maxbytes 
+ORDER BY 1
+</data>
+									</sql>
+								</query>
+								<query>
+									<name>
+										<data>SessionStatus</data>
+									</name>
+									<sql>
+										<data>select SID,
+  PROCESS,
+  OSUSER,
+  MACHINE,
+  STATUS,
+  SCHEMANAME,
+  PROGRAM,
+  TYPE,
+  STATE
+FROM v$session where TYPE = &apos;USER&apos;</data>
+									</sql>
+								</query>
+								<query>
+									<name>
+										<data>LockStatus</data>
+									</name>
+									<sql>
+										<data>SELECT
+  l.SID,
+  user,
+  s.OSUSER,
+  s.TYPE,
+  s.MACHINE,
+  s.PROGRAM,
+  ID1,
+  ID2,
+  LMODE,
+  REQUEST,
+  (CTIME) Seconds,
+  &quot;BLOCK&quot;
+FROM V$LOCK l, v$SESSION s
+WHERE
+l.sid = s.SID and s.TYPE = &apos;USER&apos;</data>
+									</sql>
+								</query>
+								<query>
+									<name>
+										<data>LongQuery</data>
+									</name>
+									<sql>
+										<data>SELECT
+l.sid,
+user,
+process,
+machine,
+time_remaining,
+message
+FROM
+v$session_longops l, v$session s
+WHERE
+l.sid = s.sid AND time_remaining &gt; 15</data>
+									</sql>
+								</query>
+							</queries>
+							<connection>
+								<database>
+									<oracle>
+										<var-databaseName>
+											<var ref="ORACLE_DB_NAME"/>
+										</var-databaseName>
+									</oracle>
+								</database>
+								<var-userName>
+									<var ref="ORACLE_USER"/>
+								</var-userName>
+								<password>
+									<var ref="ORACLE_PASS"/>
+								</password>
+							</connection>
+							<showHeadlines>true</showHeadlines>
+						</sql-toolkit>
+					</plugin>
+				</sampler>
+			</samplerGroup>
+		</samplerGroup>
+	</samplers>
+	<samplerIncludes>
+		<samplerInclude name="Oracle Trace Files">
+			<sampler ref="FKM"/>
+			<plugin>
+				<fkm>
+					<files>
+						<file>
+							<source>
+								<filename>
+									<var ref="ORACLE_TRACE_FILE_DIRECTORY"/>
+									<data>/*.trc</data>
+								</filename>
+							</source>
+						</file>
+					</files>
+				</fkm>
+			</plugin>
+		</samplerInclude>
+	</samplerIncludes>
+</gateway>
